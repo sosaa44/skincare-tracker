@@ -98,9 +98,11 @@ if products:
     if date.today() >= next_day:
         st.success("You can use it today")
     else:
-        st.warning(f"Wait {(next_day - date.today()).days} days")
+        days = (next_day - date.today()).days
+        st.warning(f"You can use it in {days} days")
 
-    st.write("History:", usage)
+    st.write("History:")
+    st.write([d.strftime("%d %B %Y") for d in usage])
 
     # --- calendar ---
     st.subheader("Monthly view")
