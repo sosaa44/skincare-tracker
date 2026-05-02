@@ -65,12 +65,30 @@ with st.expander("Add product"):
         })
         st.rerun()
 
+
+def delete_product(name):
+    try:
+        # delete usage first (foreign dependency)
+        supabase.table("usage").delete().eq("product", name).execute()
+
+        # delete product
+        supabase.table("products").delete().eq("name", name).execute()
+
+        st.success("Product deleted")
+    except Exception as e:
+        st.error(f"Error: {e}")
+
 # --- load products ---
 products = get_products()
 
 if products:
     names = [p["name"] for p in products]
     selected = st.selectbox("Select product", names)
+
+
+    if st.button("Delete product"):
+        delete_product(selected)
+        st.rerun()
 
     row = next(p for p in products if p["name"] == selected)
 
