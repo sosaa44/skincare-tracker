@@ -1,33 +1,16 @@
 import streamlit as st
-import sqlite3
 import calendar
 from datetime import date, timedelta
+from supabase import create_client
 
 st.set_page_config(page_title="Tracker", layout="centered")
 st.title("Skincare Tracker")
 
-# --- database ---
-conn = sqlite3.connect("data.db", check_same_thread=False)
-c = conn.cursor()
+# --- SUPABASE CONNECTION ---
+SUPABASE_URL = "https://czydbiqjaljhcakubnrb.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN6eWRiaXFqYWxqaGNha3VibnJiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc3NDMyMTAsImV4cCI6MjA5MzMxOTIxMH0.S25Tq_TclBl1MX_SenTw-QyJbkEFIzU3wBOCqcz5cbs"
 
-c.execute("""
-CREATE TABLE IF NOT EXISTS products (
-    name TEXT PRIMARY KEY,
-    pause_days INTEGER,
-    start_date TEXT,
-    phase_change_after INTEGER,
-    new_pause_days INTEGER
-)
-""")
-
-c.execute("""
-CREATE TABLE IF NOT EXISTS usage (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    product TEXT,
-    used_on TEXT
-)
-""")
-conn.commit()
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- logic ---
 def get_current_pause(p):
@@ -36,13 +19,21 @@ def get_current_pause(p):
         return p["new_pause_days"]
     return p["pause_days"]
 
+def get_products():
+    return supabase.table("products").select("*").execute().data
+
+def add_product(p):
+    supabase.table("products").insert(p).execute()
+
 def get_usage(name):
-    rows = c.execute("SELECT used_on FROM usage WHERE product=?", (name,)).fetchall()
-    return [date.fromisoformat(r[0]) for r in rows]
+    res = supabase.table("usage").select("*").eq("product", name).execute()
+    return [date.fromisoformat(x["used_on"]) for x in res.data]
 
 def add_usage(name):
-    c.execute("INSERT INTO usage (product, used_on) VALUES (?, ?)", (name, date.today().isoformat()))
-    conn.commit()
+    supabase.table("usage").insert({
+        "product": name,
+        "used_on": date.today().isoformat()
+    }).execute()
 
 def get_next_allowed(p, usage):
     if not usage:
@@ -57,28 +48,31 @@ with st.expander("Add product"):
     new_pause = st.number_input("New pause days", 1, 10, 2)
 
     if st.button("Add product"):
-        c.execute(
-            "INSERT OR REPLACE INTO products VALUES (?, ?, ?, ?, ?)",
-            (name, pause, date.today().isoformat(), phase, new_pause)
-        )
-        conn.commit()
+        add_product({
+            "name": name,
+            "pause_days": pause,
+            "start_date": date.today().isoformat(),
+            "phase_change_after": phase,
+            "new_pause_days": new_pause
+        })
         st.success("Saved")
+        st.rerun()
 
 # --- load products ---
-products = c.execute("SELECT * FROM products").fetchall()
+products = get_products()
 
 if products:
-    names = [p[0] for p in products]
+    names = [p["name"] for p in products]
     selected = st.selectbox("Select product", names)
 
-    row = next(p for p in products if p[0] == selected)
+    row = next(p for p in products if p["name"] == selected)
 
     p = {
-        "name": row[0],
-        "pause_days": row[1],
-        "start_date": date.fromisoformat(row[2]),
-        "phase_change_after": row[3],
-        "new_pause_days": row[4]
+        "name": row["name"],
+        "pause_days": row["pause_days"],
+        "start_date": date.fromisoformat(row["start_date"]),
+        "phase_change_after": row["phase_change_after"],
+        "new_pause_days": row["new_pause_days"]
     }
 
     usage = get_usage(selected)
