@@ -20,20 +20,28 @@ def get_current_pause(p):
     return p["pause_days"]
 
 def get_products():
-    return supabase.table("products").select("*").execute().data
+    res = supabase.table("products").select("*").execute()
+    return res.data if res.data else []
 
 def add_product(p):
-    supabase.table("products").insert(p).execute()
+    try:
+        supabase.table("products").upsert(p).execute()
+        st.success("Saved")
+    except Exception as e:
+        st.error(f"Error: {e}")
 
 def get_usage(name):
     res = supabase.table("usage").select("*").eq("product", name).execute()
-    return [date.fromisoformat(x["used_on"]) for x in res.data]
+    return [date.fromisoformat(x["used_on"]) for x in res.data] if res.data else []
 
 def add_usage(name):
-    supabase.table("usage").insert({
-        "product": name,
-        "used_on": date.today().isoformat()
-    }).execute()
+    try:
+        supabase.table("usage").insert({
+            "product": name,
+            "used_on": date.today().isoformat()
+        }).execute()
+    except Exception as e:
+        st.error(f"Error: {e}")
 
 def get_next_allowed(p, usage):
     if not usage:
@@ -55,7 +63,6 @@ with st.expander("Add product"):
             "phase_change_after": phase,
             "new_pause_days": new_pause
         })
-        st.success("Saved")
         st.rerun()
 
 # --- load products ---
@@ -82,7 +89,6 @@ if products:
         add_usage(selected)
         st.rerun()
 
-    # display
     weekday = next_day.strftime("%A")
     formatted = next_day.strftime("%d %B %Y")
 
@@ -98,7 +104,6 @@ if products:
 
     # --- calendar ---
     st.subheader("Monthly view")
-
     today = date.today()
     cal = calendar.monthcalendar(today.year, today.month)
 
@@ -116,13 +121,6 @@ if products:
                     cols[i].warning(str(day))
                 else:
                     cols[i].write(str(day))
-
-    # settings
-    with st.expander("Settings"):
-        st.write(f"Pause days: {p['pause_days']}")
-        st.write(f"Change after: {p['phase_change_after']}")
-        st.write(f"New pause: {p['new_pause_days']}")
-        st.write(f"Start: {p['start_date']}")
 
 else:
     st.info("Add your first product")
